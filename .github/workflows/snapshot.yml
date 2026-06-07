@@ -1,0 +1,51 @@
+name: Price Snapshot
+
+on:
+  workflow_dispatch:  # triggered by cron-job.org via GitHub API (more reliable than schedule)
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+        # No npm install — zero dependencies, pure Node.js built-ins
+
+      - name: Validate secrets
+        run: |
+          if [ -z "$BLIZZARD_CLIENT_ID" ] || [ -z "$BLIZZARD_CLIENT_SECRET" ]; then
+            echo "❌ BLIZZARD_CLIENT_ID or BLIZZARD_CLIENT_SECRET not set in repo secrets"
+            echo "   Go to: Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          echo "✅ Secrets present"
+        env:
+          BLIZZARD_CLIENT_ID: ${{ secrets.BLIZZARD_CLIENT_ID }}
+          BLIZZARD_CLIENT_SECRET: ${{ secrets.BLIZZARD_CLIENT_SECRET }}
+
+      - name: Run snapshot
+        run: node snapshot.js
+        env:
+          BLIZZARD_CLIENT_ID: ${{ secrets.BLIZZARD_CLIENT_ID }}
+          BLIZZARD_CLIENT_SECRET: ${{ secrets.BLIZZARD_CLIENT_SECRET }}
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add price-snapshots.json.gz
+          # gzip blobs do not git-delta — keeping per-run history would bloat the repo (~16MB/commit).
+          # The full timeseries already lives inside the file, so history here is redundant: we keep a
+          # single rolling commit by amending the root commit and force-pushing.
+          if git diff --staged --quiet; then
+            echo "No change (dedup — last snapshot too recent)"
+          else
+            git commit --amend -m "snapshots (rolling): $(date -u +%Y-%m-%dT%H:%M:%SZ) [skip ci]"
+            git push --force origin HEAD:main
+          fi
