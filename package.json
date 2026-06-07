@@ -1,0 +1,13 @@
+{
+  "name": "wow-midnight-snapshot",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "WoW Midnight AH price snapshot collector — EU commodity market",
+  "private": false,
+  "scripts": {
+    "snapshot": "node snapshot.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
